@@ -1,0 +1,121 @@
+// services/api.js
+import axios from 'axios';
+
+// Base URL của API
+const API_BASE = 'http://localhost:5000/api';
+
+// Tạo instance axios với baseURL
+const api = axios.create({
+  baseURL: API_BASE,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+const transformImageUrl = (url) => {
+  if (!url) return null;
+  // Replace Android emulator localhost với browser localhost
+  return url.replace('http://10.0.2.2:5000', 'http://localhost:5000');
+};
+
+// Transform response data
+const transformFloodReportData = (data) => {
+  if (Array.isArray(data)) {
+    return data.map(report => ({
+      ...report,
+      imageUrl: transformImageUrl(report.imageUrl)
+    }));
+  }
+  return {
+    ...data,
+    imageUrl: transformImageUrl(data.imageUrl)
+  };
+};
+
+// Interceptor để handle error globally (tùy chọn)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const message = error.response?.data?.message || error.message || 'Có lỗi xảy ra';
+    return Promise.reject(new Error(message));
+  }
+);
+
+// ========== FLOOD REPORTS ==========
+
+export async function getFloodReports(status = '') {
+  const params = status ? { status } : {};
+  const res = await api.get('/floodreports/admin/all', { params });
+
+  if (res.data?.data) {
+    res.data.data = transformFloodReportData(res.data.data);
+  }
+  return res.data;
+}
+
+// SỬA: Thêm waterLevel parameter
+export async function reviewFloodReport(id, status, waterLevel = null, adminNote = '') {
+  const body = { status, adminNote };
+
+  // Nếu duyệt (Approved), bắt buộc phải có waterLevel
+  if (status === 'Approved') {
+    if (!waterLevel) {
+      throw new Error('Vui lòng đánh giá mức độ ngập (waterLevel) trước khi duyệt!');
+    }
+    body.waterLevel = waterLevel;
+  }
+
+  const res = await api.put(`/floodreports/admin/${id}/review`, body);
+  return res.data;
+}
+
+// ========== FEEDBACKS ==========
+
+export async function getFeedbacks(status = '') {
+  const params = status ? { status } : {};
+  const res = await api.get('/feedback/admin/all', { params });
+  return res.data;
+}
+
+// SỬA: Đổi parameter từ adminNote → adminResponse
+export async function reviewFeedback(id, status, adminResponse = '') {
+  const res = await api.put(`/feedback/admin/${id}/respond`, {
+    status,
+    response: adminResponse
+  });
+  return res.data;
+}
+
+// ========== EVENTS ==========
+
+export const getEventBanners = () => api.get('/EventBanners');
+
+// Alias export để tương thích
+export { getEventBanners as getEvents };
+
+export async function createEvent(data) {
+  const res = await api.post('/EventBanners', data);
+  return res.data;
+}
+
+// Hàm cập nhật Event Banner
+export async function updateEvent(id, data) {
+  // Sử dụng phương thức PUT để cập nhật thông tin Event theo ID
+  const res = await api.put(`/EventBanners/${id}`, data);
+  return res.data;
+}
+
+export async function deleteEvent(id) {
+  const res = await api.delete(`/EventBanners/${id}`);
+  return res.data;
+}
+// ========== USERS ==========
+
+export const getUsers = () => api.get('/auth/users');
+
+// ========== AI FLOOD IMAGE ANALYSIS ==========
+
+export const analyzeFloodImageAI = (floodReportId) => {
+  return api.post(`/aifloodanalysis/analyze/${floodReportId}`);
+};
+
+export default api;
