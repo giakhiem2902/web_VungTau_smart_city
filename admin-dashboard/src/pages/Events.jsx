@@ -59,14 +59,17 @@ export default function Events() {
   
   // HÀM XỬ LÝ LƯU (THÊM HOẶC SỬA) TỪ MODAL
   const handleSave = async (data) => {
+    // data chứa { id: ..., formData: FormData }
+    const { id, formData } = data; 
+    
     try {
-      if (data.id) {
-        // Cập nhật (Sửa)
-        await updateEvent(data.id, data);
+      if (id) {
+        // Cập nhật (Sửa): Gửi ID và FormData
+        await updateEvent(id, formData); 
         alert('Cập nhật Event Banner thành công!');
       } else {
-        // Thêm mới
-        await createEvent(data);
+        // Thêm mới: Chỉ gửi FormData
+        await createEvent(formData); 
         alert('Thêm Event Banner mới thành công!');
       }
       setIsModalOpen(false);
@@ -111,7 +114,7 @@ export default function Events() {
           </button>
           <button
             className="btn"
-            onClick={handleAddClick} // THAY ĐỔI: Gọi hàm mở Modal Thêm mới
+            onClick={handleAddClick} 
             style={{
               background: '#10b981',
               padding: '10px 20px',
@@ -176,7 +179,7 @@ export default function Events() {
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                       <button
                         className="btn"
-                        onClick={() => handleEditClick(b)} // THAY ĐỔI: Gọi hàm mở Modal Sửa
+                        onClick={() => handleEditClick(b)} 
                         style={{
                           background: '#3b82f6',
                           padding: '8px 16px',
@@ -207,14 +210,14 @@ export default function Events() {
         </div>
       )}
 
-    {/* MODAL THÊM/SỬA */}
-    {isModalOpen && (
-        <EventBannerFormModal
-            bannerData={currentBanner}
-            onClose={() => setIsModalOpen(false)}
-            onSave={handleSave}
-        />
-    )}
+    {/* MODAL THÊM/SỬA */}
+    {isModalOpen && (
+        <EventBannerFormModal
+            bannerData={currentBanner}
+            onClose={() => setIsModalOpen(false)}
+            onSave={handleSave}
+        />
+    )}
     </Panel>
   );
 }
@@ -224,138 +227,177 @@ export default function Events() {
 function EventBannerFormModal({ bannerData, onClose, onSave }) {
     const [title, setTitle] = useState(bannerData?.title || '');
     const [description, setDescription] = useState(bannerData?.description || '');
-    const [imageUrl, setImageUrl] = useState(bannerData?.imageUrl || '');
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [imageUrlPreview, setImageUrlPreview] = useState(bannerData?.imageUrl || '');
     const [loading, setLoading] = useState(false);
     const isEdit = !!bannerData;
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!title || !description || !imageUrl) {
-            alert('Vui lòng điền đủ Title, Description và Image URL.');
+        if (!title || !description || (!imageUrlPreview && !selectedFile)) {
+            alert('Vui lòng điền đủ Title, Description và cung cấp File ảnh/Image URL.');
             return;
         }
-
+        // TẠO FormData để gửi file và các trường dữ liệu khác
+        const formData = new FormData();
+        
+        // Thêm các trường text
+        formData.append('title', title);
+        formData.append('description', description);
+        
+        // Logic gửi file hoặc URL cũ
+        if (selectedFile) {
+            // Nếu có file mới được chọn, gửi file đó (server sẽ xử lý upload)
+            formData.append('imageFile', selectedFile); 
+        } else if (imageUrlPreview && isEdit) {
+            // Nếu là Sửa và không chọn file mới, gửi lại URL cũ (server cần biết để không xóa)
+            formData.append('imageUrl', imageUrlPreview); 
+        }
         const dataToSave = {
             id: isEdit ? bannerData.id : undefined,
-            title,
-            description,
-            imageUrl,
+            formData, // Gửi FormData đi
         };
         
         setLoading(true);
         // Gọi hàm onSave được truyền từ component cha
         onSave(dataToSave).finally(() => setLoading(false));
     };
+    // Hàm xử lý chọn file
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setSelectedFile(file);
+            // Tạo URL tạm thời để hiển thị preview
+            setImageUrlPreview(URL.createObjectURL(file)); 
+        } else {
+            setSelectedFile(null);
+            // Quay lại URL cũ nếu không có file mới
+            setImageUrlPreview(bannerData?.imageUrl || ''); 
+        }
+    };
+    // Xử lý khi Modal đóng, giải phóng URL tạm thời
+    useEffect(() => {
+        return () => {
+            if (imageUrlPreview && imageUrlPreview.startsWith('blob:')) {
+                URL.revokeObjectURL(imageUrlPreview);
+            }
+        };
+    }, [imageUrlPreview]);
 
     return (
-        // Modal Overlay
-        <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            display: 'flex', justifyContent: 'center', alignItems: 'center',
-            zIndex: 1000,
-            overflowY: 'auto'
-        }}>
-            {/* Modal Content */}
-            <div style={{
-                backgroundColor: 'white', padding: '30px', borderRadius: '12px',
-                width: '90%', maxWidth: '500px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-                margin: '20px 0'
-            }}>
-                <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#111827', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px' }}>
-                    {isEdit ? '✏️ Sửa Event Banner' : '➕ Thêm Event Banner Mới'}
-                </h3>
-                <form onSubmit={handleSubmit}>
-                    <div style={{ marginBottom: '15px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px', color: '#374151' }}>Title</label>
-                        <input
-                            type="text"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            style={{ 
-                                width: '100%', padding: '10px', border: '1px solid #d1d5db', 
-                                borderRadius: '6px', boxSizing: 'border-box' 
-                            }}
-                            required
-                        />
-                    </div>
-                    <div style={{ marginBottom: '15px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px', color: '#374151' }}>Description</label>
-                        <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            rows="3"
-                            style={{ 
-                                width: '100%', padding: '10px', border: '1px solid #d1d5db', 
-                                borderRadius: '6px', resize: 'vertical', boxSizing: 'border-box' 
-                            }}
-                            required
-                        />
-                    </div>
-                    <div style={{ marginBottom: '25px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px', color: '#374151' }}>Image URL</label>
-                        <input
-                            type="url"
-                            value={imageUrl}
-                            onChange={(e) => setImageUrl(e.target.value)}
-                            style={{ 
-                                width: '100%', padding: '10px', border: '1px solid #d1d5db', 
-                                borderRadius: '6px', boxSizing: 'border-box' 
-                            }}
-                            required
-                        />
-                        {imageUrl && (
-                             <img 
-                                src={imageUrl} 
-                                alt="Preview" 
-                                style={{ 
-                                    maxWidth: '100%', 
-                                    height: 'auto', 
-                                    marginTop: '10px', 
-                                    borderRadius: '6px',
-                                    border: '1px solid #e5e7eb'
-                                }}
-                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                onLoad={(e) => { e.currentTarget.style.display = 'block'; }}
-                            />
-                        )}
-                    </div>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-                        <button 
-                            type="button" 
-                            onClick={onClose} 
-                            style={{ 
-                                padding: '10px 20px', 
-                                background: '#f3f4f6', 
-                                color: '#4b5563', 
-                                borderRadius: '6px', 
-                                border: 'none', 
-                                cursor: 'pointer',
-                                fontWeight: '500'
-                            }}
-                            disabled={loading}
-                        >
-                            Hủy
-                        </button>
-                        <button 
-                            type="submit" 
-                            style={{ 
-                                padding: '10px 20px', 
-                                background: isEdit ? '#3b82f6' : '#10b981', 
-                                color: 'white', 
-                                borderRadius: '6px', 
-                                border: 'none', 
-                                cursor: 'pointer',
-                                fontWeight: '500'
-                            }}
-                            disabled={loading}
-                        >
-                            {loading ? 'Đang lưu...' : (isEdit ? 'Lưu Thay Đổi' : 'Thêm Mới')}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
+        // Modal Overlay
+        <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex', justifyContent: 'center', alignItems: 'center',
+            zIndex: 1000,
+            overflowY: 'auto'
+        }}>
+            {/* Modal Content */}
+            <div style={{
+                backgroundColor: 'white', padding: '30px', borderRadius: '12px',
+                width: '90%', maxWidth: '500px', boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+                margin: '20px 0'
+            }}>
+                <h3 style={{ marginTop: 0, marginBottom: '20px', color: '#111827', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px' }}>
+                    {isEdit ? '✏️ Sửa Event Banner' : '➕ Thêm Event Banner Mới'}
+                </h3>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ marginBottom: '15px' }}>
+                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px', color: '#374151' }}>Title</label>
+                        <input
+                            type="text"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            style={{ 
+                                width: '100%', padding: '10px', border: '1px solid #d1d5db', 
+                                borderRadius: '6px', boxSizing: 'border-box' 
+                            }}
+                            required
+                        />
+                    </div>
+                    <div style={{ marginBottom: '15px' }}>
+                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px', color: '#374151' }}>Description</label>
+                        <textarea
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            rows="3"
+                            style={{ 
+                                width: '100%', padding: '10px', border: '1px solid #d1d5db', 
+                                borderRadius: '6px', resize: 'vertical', boxSizing: 'border-box' 
+                            }}
+                            required
+                        />
+                    </div>
+                    
+                    {/* ✅ TRƯỜNG TẢI FILE ẢNH */}
+                    <div style={{ marginBottom: '25px' }}>
+                        <label style={{ display: 'block', marginBottom: '5px', fontWeight: '500', fontSize: '14px', color: '#374151' }}>
+                            {isEdit ? 'Tải ảnh mới (chọn file để thay thế ảnh cũ)' : 'Tải ảnh Banner'}
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileChange}
+                            style={{ 
+                                width: '100%', padding: '10px', border: '1px solid #d1d5db', 
+                                borderRadius: '6px', boxSizing: 'border-box' 
+                            }}
+                            required={!isEdit} // Bắt buộc khi Thêm mới
+                        />
+                        {/* Hiển thị ảnh preview (Ảnh cũ HOẶC ảnh mới chọn) */}
+                        {imageUrlPreview && (
+                             <img 
+                                src={imageUrlPreview} 
+                                alt="Preview" 
+                                style={{ 
+                                    maxWidth: '100%', 
+                                    height: 'auto', 
+                                    marginTop: '10px', 
+                                    borderRadius: '6px',
+                                    border: '1px solid #e5e7eb'
+                                }}
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                onLoad={(e) => { e.currentTarget.style.display = 'block'; }}
+                            />
+                        )}
+                    </div>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                        <button 
+                            type="button" 
+                            onClick={onClose} 
+                            style={{ 
+                                padding: '10px 20px', 
+                                background: '#f3f4f6', 
+                                color: '#4b5563', 
+                                borderRadius: '6px', 
+                                border: 'none', 
+                                cursor: 'pointer',
+                                fontWeight: '500'
+                            }}
+                            disabled={loading}
+                        >
+                            Hủy
+                        </button>
+                        <button 
+                            type="submit" 
+                            style={{ 
+                                padding: '10px 20px', 
+                                background: isEdit ? '#3b82f6' : '#10b981', 
+                                color: 'white', 
+                                borderRadius: '6px', 
+                                border: 'none', 
+                                cursor: 'pointer',
+                                fontWeight: '500'
+                            }}
+                            disabled={loading}
+                        >
+                            {loading ? 'Đang lưu...' : (isEdit ? 'Lưu Thay Đổi' : 'Thêm Mới')}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
 }
